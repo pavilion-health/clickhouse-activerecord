@@ -18,7 +18,7 @@ module ActiveRecord
           result = do_execute(sql, name)
           ActiveRecord::Result.new(result['meta'].map { |m| m['name'] }, result['data'])
         rescue StandardError => _e
-          raise ActiveRecord::ActiveRecordError, "Response: #{result}"
+          raise ActiveRecord::ActiveRecordError, "Response: #{result}. #{_e.message}"
         end
 
         def exec_update(_sql, _name = nil, _binds = [])
