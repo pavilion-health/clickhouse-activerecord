@@ -17,9 +17,18 @@ module ActiveRecord
       # Establishes a connection to the database that's used by all Active Record objects
       def clickhouse_connection(config)
         config = config.symbolize_keys
-        host = config[:host] || 'localhost'
-        port = config[:port] || 8123
-        ssl = config[:ssl].present? ? config[:ssl] : port == 443
+        if config[:connection]
+          connection = {
+            connection: config[:connection]
+          }
+        else
+          port = config[:port] || 8123
+          connection = {
+            host: config[:host] || 'localhost',
+            port: port,
+            ssl: config[:ssl].present? ? config[:ssl] : port == 443,
+          }
+        end
 
         if config.key?(:database)
           database = config[:database]
@@ -27,7 +36,7 @@ module ActiveRecord
           raise ArgumentError, 'No database specified. Missing argument: database.'
         end
 
-        ConnectionAdapters::ClickhouseAdapter.new(logger, [host, port, ssl], { user: config[:username], password: config[:password], database: database }.compact, config)
+        ConnectionAdapters::ClickhouseAdapter.new(logger, connection, { user: config[:username], password: config[:password], database: database }.compact, config)
       end
     end
   end
@@ -50,7 +59,11 @@ module ActiveRecord
   module TypeCaster
     class Map
       def is_view
-        types.is_view
+        if @klass.respond_to?(:is_view)
+          @klass.is_view # rails 6.1
+        else
+          types.is_view # less than 6.1
+        end
       end
     end
   end
@@ -79,7 +92,6 @@ module ActiveRecord
 
     class ClickhouseAdapter < AbstractAdapter
       ADAPTER_NAME = 'Clickhouse'.freeze
-
       NATIVE_DATABASE_TYPES = {
         string: { name: 'String' },
         integer: { name: 'UInt32' },
@@ -88,7 +100,21 @@ module ActiveRecord
         decimal: { name: 'Decimal' },
         datetime: { name: 'DateTime' },
         date: { name: 'Date' },
-        boolean: { name: 'UInt8' }
+        boolean: { name: 'UInt8' },
+
+        int8:  { name: 'Int8' },
+        int16: { name: 'Int16' },
+        int32: { name: 'Int32' },
+        int64:  { name: 'Int64' },
+        int128: { name: 'Int128' },
+        int256: { name: 'Int256' },
+
+        uint8: { name: 'UInt8' },
+        uint16: { name: 'UInt16' },
+        uint32: { name: 'UInt32' },
+        uint64: { name: 'UInt64' },
+        # uint128: { name: 'UInt128' }, not yet implemented in clickhouse
+        uint256: { name: 'UInt256' },
       }.freeze
 
       include Clickhouse::SchemaStatements
@@ -139,10 +165,12 @@ module ActiveRecord
           when /(Nullable)?\(?String\)?/
             super('String')
           when /(Nullable)?\(?U?Int8\)?/
-            super('int2')
-          when /(Nullable)?\(?U?Int(16|32)\)?/
-            super('int4')
-          when /(Nullable)?\(?U?Int(64)\)?/
+            1
+          when /(Nullable)?\(?U?Int16\)?/
+            2
+          when /(Nullable)?\(?U?Int32\)?/
+            nil
+          when /(Nullable)?\(?U?Int64\)?/
             8
           else
             super
@@ -154,14 +182,20 @@ module ActiveRecord
         register_class_with_limit m, %r(String), Type::String
         register_class_with_limit m, 'Date',  Clickhouse::OID::Date
         register_class_with_limit m, 'DateTime',  Clickhouse::OID::DateTime
-        register_class_with_limit m, %r(Uint8), Type::UnsignedInteger
-        m.alias_type 'UInt16', 'UInt8'
-        m.alias_type 'UInt32', 'UInt8'
-        register_class_with_limit m, %r(UInt64), Type::UnsignedInteger
+
         register_class_with_limit m, %r(Int8), Type::Integer
-        m.alias_type 'Int16', 'Int8'
-        m.alias_type 'Int32', 'Int8'
+        register_class_with_limit m, %r(Int16), Type::Integer
+        register_class_with_limit m, %r(Int32), Type::Integer
         register_class_with_limit m, %r(Int64), Type::Integer
+        register_class_with_limit m, %r(Int128), Type::Integer
+        register_class_with_limit m, %r(Int256), Type::Integer
+
+        register_class_with_limit m, %r(Uint8), Type::UnsignedInteger
+        register_class_with_limit m, %r(UInt16), Type::UnsignedInteger
+        register_class_with_limit m, %r(UInt32), Type::UnsignedInteger
+        register_class_with_limit m, %r(UInt64), Type::UnsignedInteger
+        #register_class_with_limit m, %r(UInt128), Type::UnsignedInteger #not implemnted in clickhouse
+        register_class_with_limit m, %r(UInt256), Type::UnsignedInteger
       end
 
       # Quoting time without microseconds

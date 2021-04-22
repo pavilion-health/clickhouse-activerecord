@@ -37,7 +37,7 @@ module ActiveRecord
 
         def table_options(table)
           sql = show_create_table(table)
-          { options: sql.gsub(/^(?:.*?)ENGINE = (.*?)$/, '\\1') }
+          { options: sql.gsub(/^(?:.*?)(?:ENGINE = (.*?))?( AS SELECT .*?)?$/, '\\1').presence, as: sql.match(/^CREATE (?:.*?) AS (SELECT .*?)$/).try(:[], 1) }.compact
         end
 
         # Not indexes on clickhouse
@@ -114,8 +114,8 @@ module ActiveRecord
           Clickhouse::SchemaCreation.new(self)
         end
 
-        def create_table_definition(*args)
-          Clickhouse::TableDefinition.new(self, *args)
+        def create_table_definition(table_name, options)
+          Clickhouse::TableDefinition.new(self, table_name, **options)
         end
 
         def new_column_from_field(table_name, field)
