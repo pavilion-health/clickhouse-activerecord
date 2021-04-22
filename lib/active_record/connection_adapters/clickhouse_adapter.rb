@@ -338,7 +338,7 @@ module ActiveRecord
       private
 
       def connect
-        @connection = Net::HTTP.start(@connection_parameters[0], @connection_parameters[1], use_ssl: @connection_parameters[2],  read_timeout: @full_config[:read_timeout] || 600, verify_mode: OpenSSL::SSL::VERIFY_NONE)
+        @connection = @connection_parameters[:connection] || Net::HTTP.start(@connection_parameters[:host], @connection_parameters[:port], read_timeout: @full_config[:read_timeout] || 600, use_ssl: @connection_parameters[:ssl], verify_mode: OpenSSL::SSL::VERIFY_NONE)
       end
 
       def apply_replica(table, options)
